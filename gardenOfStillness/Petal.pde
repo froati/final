@@ -30,7 +30,7 @@ class Petal {
       addSoil(x, z, SOIL_PER_PETAL);
       done = true;
     }
-    if (abs(x - width / 2.0) > visibleHalfWidth(z) + 60) done = true;   // 화면 밖
+    if (abs(x - W / 2.0) > visibleHalfWidth(z) + 60) done = true;   // 화면 밖
   }
 
   void display() {

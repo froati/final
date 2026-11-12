@@ -142,8 +142,10 @@ void updateGarden() {
 
     // 흩날림: 꽃머리가 "웹캠 화면에서" 있는 칸의 움직임이 sensitivity를 넘으면 꽃잎이 된다
     //         보는 시점이 움직여도 웹캠 기준으로 계산한다 (Meadow.pde의 webcamViewX·Y)
-    float sx = webcamViewX(f.headX(), f.z);
-    float sy = webcamViewY(f.headY(), f.z);
+    //         웹캠 속 사람의 몸을 캐릭터 몸에 겹쳐서 본다 (Character.pde screenToCam)
+    //         → 오른손을 휘두르면 캐릭터 오른손 근처 꽃이 흩날린다
+    float sx = screenToCamX(webcamViewX(f.headX(), f.z));
+    float sy = screenToCamY(webcamViewY(f.headY(), f.z));
     int cx = constrain(int(sx / CELL), 0, COLS - 1);
     int cy = constrain(int(sy / CELL), 0, ROWS - 1);
     if (!waving && f.stage >= 1 && motion[cx][cy] > sensitivity) {
@@ -206,7 +208,7 @@ color mutate(color c) {
 void plantAt(float sx, float sy) {
   if (sy <= HORIZON_Y + 2) return;                    // 하늘(지평선 위)을 누르면 심지 않는다
   float z = max(groundZForScreenY(sy), -2000);
-  float x = width / 2.0 + (sx - width / 2.0) / depthScale(z);
+  float x = W / 2.0 + (sx - W / 2.0) / depthScale(z);
   addFlower(new Flower(x, GROUND_Y, z, palette[int(random(palette.length))]));
 }
 
@@ -242,15 +244,15 @@ void drawSky() {
   beginShape(QUADS);                 // 꼭짓점 색이 다른 사각형 = 그러데이션
   fill(top);
   vertex(0, 0);
-  vertex(width, 0);
+  vertex(W, 0);
   fill(horizon);
-  vertex(width, skyHorizon + 20);
+  vertex(W, skyHorizon + 20);
   vertex(0, skyHorizon + 20);
   endShape();
-  rect(0, skyHorizon + 20, width, height);   // 지평선 아래는 땅이 덮지만 혹시 빈 곳이 보일 때를 대비
+  rect(0, skyHorizon + 20, W, H);   // 지평선 아래는 땅이 덮지만 혹시 빈 곳이 보일 때를 대비
 
   // 시점이 옆으로 움직이면 먼 것일수록 조금만 움직인다 (시차 — 입체감)
-  float shift = -(eyeX - width / 2.0);
+  float shift = -(eyeX - W / 2.0);
 
   // 해: light가 클수록 높이 뜬다
   float sunY = map(light, 0, 1, skyHorizon + 30, 60);
@@ -289,14 +291,14 @@ void updateHint() {
 void drawStillHint() {
   if (hintAlpha < 2) return;
   String msg = "잠시 멈춰 보세요";
-  textFont(bannerFont);
+  textFont(bannerFont, 28);
   textAlign(CENTER, CENTER);
   float pulse = 0.75 + 0.25 * sin(millis() * 0.003);   // 천천히 숨 쉬듯
   fill(0, hintAlpha * 0.35);
-  text(msg, width / 2 + 2, 402);              // 아래 가운데 — 점검 정보·조절판과 겹치지 않게
+  text(msg, W / 2 + 2, 402);              // 아래 가운데 — 점검 정보·조절판과 겹치지 않게
   fill(255, 250, 235, hintAlpha * pulse);
-  text(msg, width / 2, 400);
-  textFont(font);
+  text(msg, W / 2, 400);
+  textFont(font, 13);
   textAlign(LEFT, BASELINE);
 }
 
@@ -307,7 +309,7 @@ void drawNightShade() {
   hint(DISABLE_DEPTH_TEST);
   noStroke();
   fill(8, 12, 35, dark * 150);
-  rect(0, 0, width, height);
+  rect(0, 0, W, H);
   hint(ENABLE_DEPTH_TEST);
 }
 
@@ -349,9 +351,9 @@ void drawGrowthStatus() {
   float tw = textWidth(label);
   noStroke();
   fill(0, 170);
-  rect(width - tw - 20, 438, tw + 14, 22, 11);
+  rect(W - tw - 20, 438, tw + 14, 22, 11);
   fill(col);
-  text(label, width - 13, 448);
+  text(label, W - 13, 448);
   textAlign(LEFT, BASELINE);
 }
 
@@ -365,15 +367,20 @@ void drawDebug() {
       + "  나비 " + butterflies.size() + "  덩굴 " + vines.size(),
     "lean " + nf(lean, 1, 2) + "   산들바람 " + nf(breeze, 1, 2) + "   거름 합 " + nf(totalSoil(), 1, 1)
       + (waving ? "   손 흔드는 중" : ""),
-    (useCamera ? "웹캠" + (bgPixels == null ? " (배경 없음 — B)" : "") : "마우스판")
+    (useCamera ? "웹캠 (얼굴 " + (faceNow ? "보임" : "안 보임") + ", 폭 " + nf(faceW, 1, 0) + ")" : "마우스판")
       + "   threshold " + nf(threshold, 1, 0) + " [ ]   고요함 기준 " + nf(calmSensitivity, 1, 0) + " - =",
+    useCamera
+      ? (hasBase
+          ? "판정  위 " + nf(upL, 1, 2) + "/" + nf(upR, 1, 2) + "  옆 " + nf(sideL, 1, 2) + "/" + nf(sideR, 1, 2)
+            + "  내려감 " + nf(dropRatio, 1, 2) + "  움직인 칸 " + movingCells
+          : "기준 잡는 중 — 2초 가만히 있어 주세요")
+      : "마우스판: 1~4 자세 · W 손흔들기 · ←→ 기울기 · 0 사람 없음",
     "fps  " + nf(frameRate, 1, 0) + (logging ? "   ● 기록 중" : ""),
-    "1~4 자세 · ←→ 기울기 · W 손흔들기 · B 배경 · M 웹캠/마우스 · S 사진 · L 기록",
-    "R 처음 · D 점검 숨기기 · H 조절판 숨기기"
+    "C 기준 다시 · M 웹캠/마우스 · S 사진 · L 기록 · R 처음 · D · H 숨기기"
   };
   noStroke();
   fill(0, 120);
-  rect(6, 6, 480, lines.length * 17 + 8, 4);
+  rect(6, 6, 520, lines.length * 17 + 8, 4);
   fill(255);
   for (int k = 0; k < lines.length; k++) {
     text(lines[k], 12, 22 + k * 17);

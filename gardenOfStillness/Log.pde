@@ -12,7 +12,8 @@ void toggleLog() {
     String name = "logs/log-" + nf(month(), 2) + nf(day(), 2) + "-"
                 + nf(hour(), 2) + nf(minute(), 2) + nf(second(), 2) + ".csv";
     logWriter = createWriter(name);
-    logWriter.println("ms,totalMotion,personCount,pose,calm,light");   // 첫 줄 = 열 이름
+    // 첫 줄 = 열 이름. 판정 숫자(얼굴·영역 변화·내려감·움직인 칸)는 A3-1 측정에서 자세별 범위를 구할 때 쓴다
+    logWriter.println("ms,totalMotion,personCount,pose,calm,light,faceX,faceY,faceW,faceNow,upL,upR,sideL,sideR,drop,movingCells,waving,lean");
     logging = true;
     println("기록 시작: " + name);
   } else {
@@ -26,6 +27,9 @@ void toggleLog() {
 void updateLog() {
   if (logging) {
     logWriter.println(millis() + "," + totalMotion + "," + personCount + ","
-                    + pose + "," + calm + "," + light);
+                    + pose + "," + calm + "," + light + ","
+                    + faceX + "," + faceY + "," + faceW + "," + faceNow + ","
+                    + upL + "," + upR + "," + sideL + "," + sideR + "," + dropRatio + "," + movingCells + ","
+                    + waving + "," + lean);
   }
 }

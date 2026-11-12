@@ -10,21 +10,23 @@ import controlP5.*;
 ControlP5 cp5;
 boolean guiVisible = true;
 
-float threshold = 60;      // 배경과 얼마나 달라야 사람으로 볼지 (A가 읽는다) — [ ] 키
+float threshold = 60;      // 기준 화면과 색이 이만큼 달라야 "달라졌다"로 볼지 (A의 자세 판정이 읽는다, 웹캠은 50으로 시작) — [ ] 키
 float sensitivity = 15;    // 칸 하나가 "움직였다"(흩날림)의 기준 — 입력 방식마다 Vision.applyModeDefaults()가 정한다
 float calmSensitivity = 150; // 전체 움직임이 이만큼이면 고요함 0 — 웹캠은 칸 768개의 합이라 칸 기준과 크기가 다르다. - = 키
 float growSpeed = 0.05;    // 꽃이 자라는 속도 (× calm × light) — 싹→꽃: 가만히 약 10초 · 두 손 약 5초 (60fps 기준)
 float lifespanSec = 40;    // 꽃의 평균 수명(초) — 보통 햇빛 기준. 두 손 들기면 짧아진다
 float poseHold = 2.0;      // 자세를 몇 초 유지해야 햇빛 목표가 바뀔지
-boolean showCamera = false; // 회색 실루엣 대신 카메라 화면 그대로 (웹캠일 때만)
+boolean showCamera = false; // 웹캠 화면을 오른쪽 위에 작게 (판정 점검용, 웹캠일 때만)
 boolean showDebug = true;   // 점검 정보 보기 (D 키로도)
 
 // 조절판에 올릴 슬라이더 — {변수 이름, 최솟값, 최댓값}
 String[] sliderNames = { "threshold", "sensitivity", "calmSensitivity", "growSpeed", "lifespanSec", "poseHold" };
 float[][] sliderRanges = { {5, 150}, {2, 60}, {5, 400}, {0.01, 0.2}, {10, 120}, {0.5, 5} };
 
-final int GUI_X = 12;
-final int GUI_Y = 182;     // 점검 정보 아래
+// ※ 조절판은 마우스를 실제 창 픽셀로 읽어서, 확대하지 않고 창 픽셀 좌표에 그린다
+//    위치만 배율에 맞춰 (확대된) 점검 정보 아래에 둔다
+final int GUI_X = round(12 * VIEW_SCALE);
+final int GUI_Y = round(190 * VIEW_SCALE);
 
 void initGui() {
   cp5 = new ControlP5(this);
@@ -68,7 +70,8 @@ void drawGui() {
   controlP5.Controller t = cp5.getController("showDebug");
   if ((t.getValue() > 0.5) != showDebug) t.setValue(showDebug ? 1 : 0);
 
-  // 바탕 판
+  // 바탕 판 — 확대 없는 기본 카메라(창 픽셀 좌표)로 그린다
+  camera();
   noStroke();
   fill(0, 120);
   rect(GUI_X - 6, GUI_Y - 6, 250, sliderNames.length * 16 + 46, 4);

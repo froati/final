@@ -31,7 +31,7 @@ PFont bannerFont;                   // 큰 글씨용 (작은 글꼴을 키우면
 
 void initSound() {
   minim = new Minim(this);
-  bannerFont = createFont("Malgun Gothic", 28);
+  bannerFont = createFont("Malgun Gothic", 28 * VIEW_SCALE);   // 확대해도 흐리지 않게 배율만큼 크게
   bgm = loadLoop("bgm.wav");
   birds = loadLoop("birds.wav");
   crickets = loadLoop("crickets.wav");
@@ -106,10 +106,10 @@ void drawBloomBanner() {
   if (t < 0 || t > 1) return;
   float a = 255 * (1 - t);
   textAlign(CENTER, CENTER);
-  textFont(bannerFont);
+  textFont(bannerFont, 28);
   fill(255, 240, 200, a);
-  text("만개", width / 2, 400 - t * 12);   // 아래 가운데에서 살짝 떠오르며 사라진다
-  textFont(font);
+  text("만개", W / 2, 400 - t * 12);   // 아래 가운데에서 살짝 떠오르며 사라진다
+  textFont(font, 13);
   textAlign(LEFT, BASELINE);
 }
 

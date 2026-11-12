@@ -14,8 +14,8 @@ float HORIZON_Y;                 // 지평선 화면 높이 (= 눈높이)
 color hazeColor;                 // 멀리 있는 것이 섞이는 안개 색
 
 void initMeadow() {
-  EYE_Z = (height / 2.0) / tan(PI / 6);   // 프로세싱 기본 카메라 공식
-  HORIZON_Y = height / 2.0;
+  EYE_Z = (H / 2.0) / tan(PI / 6);   // 프로세싱 기본 카메라 공식
+  HORIZON_Y = H / 2.0;
   hazeColor = color(185, 208, 195);
 
   // 풀잎을 미리 한 번만 만들어 PShape에 담아 둔다 (매 프레임 만들면 느리다)
@@ -27,12 +27,12 @@ void initMeadow() {
     s.noStroke();
     for (int i = 0; i < perChunk; i++) {
       // 화면 높이로 고르게 뽑은 뒤 그 높이에 맞는 z를 구한다 → 가까운 곳도 빽빽하게
-      // height + 170: 움직이는 시점은 기본 카메라보다 발밑(z ≈ 200)까지 보이므로 그만큼 앞까지 심는다
-      float syMin = map(c, 0, GRASS_CHUNKS, height + 170, HORIZON_Y + 25);
-      float syMax = map(c + 1, 0, GRASS_CHUNKS, height + 170, HORIZON_Y + 25);
+      // H + 170: 움직이는 시점은 기본 카메라보다 발밑(z ≈ 200)까지 보이므로 그만큼 앞까지 심는다
+      float syMin = map(c, 0, GRASS_CHUNKS, H + 170, HORIZON_Y + 25);
+      float syMax = map(c + 1, 0, GRASS_CHUNKS, H + 170, HORIZON_Y + 25);
       float sy = random(syMax, syMin);
       float z = groundZForScreenY(sy);
-      float x = width / 2.0 + random(-1.5, 1.5) * visibleHalfWidth(z);   // 시점이 옆으로 가도 빈 곳이 안 보이게 넓게
+      float x = W / 2.0 + random(-1.5, 1.5) * visibleHalfWidth(z);   // 시점이 옆으로 가도 빈 곳이 안 보이게 넓게
 
       float h = random(9, 20);        // 풀잎 키 — 땅 꽃(줄기 최대 약 60)보다 낮게
       float w = random(3, 6);         // 풀잎 너비
@@ -66,40 +66,44 @@ final boolean CAMERA_SWAY = false;
 void updateWorldCamera() {
   if (CAMERA_SWAY) {
     float t = millis() / 1000.0;
-    eyeX = width / 2.0 + 160 * sin(t * 0.12);   // 약 50초에 한 번 좌우로 오간다
+    eyeX = W / 2.0 + 160 * sin(t * 0.12);   // 약 50초에 한 번 좌우로 오간다
     eyeY = 200 + 30 * sin(t * 0.09);            // 눈높이도 살짝 오르내린다
     eyeZ = EYE_Z * 1.15;
   } else {
-    eyeX = width / 2.0;                         // 기본 카메라 그대로
-    eyeY = height / 2.0;
+    eyeX = W / 2.0;                         // 기본 카메라 그대로
+    eyeY = H / 2.0;
     eyeZ = EYE_Z;
   }
   setWorldCamera();
-  skyHorizon = screenY(eyeX, GROUND_Y, eyeZ - 100000);   // 아주 먼 땅 = 지평선
+  // 아주 먼 땅 = 지평선. screenY는 실제 창 픽셀이라 배율로 나눠 640×480 좌표로 바꾼다
+  skyHorizon = screenY(eyeX, GROUND_Y, eyeZ - 100000) / VIEW_SCALE;
 }
 
+// 창이 VIEW_SCALE배로 커져도 같은 모습이 보이게, 카메라 위치를 배율만큼 키우고 세계도 같은 배율로 키운다
 void setWorldCamera() {
+  float s = VIEW_SCALE;
   if (CAMERA_SWAY) {
-    camera(eyeX, eyeY, eyeZ,              // 눈 위치
-           width / 2.0, 290, -200,        // 바라보는 곳: 사람 조금 뒤 평원
-           0, 1, 0);                      // 위쪽 방향 (프로세싱은 y가 아래로 커진다)
+    camera(eyeX * s, eyeY * s, eyeZ * s,          // 눈 위치
+           W / 2.0 * s, 290 * s, -200 * s,        // 바라보는 곳: 사람 조금 뒤 평원
+           0, 1, 0);                              // 위쪽 방향 (프로세싱은 y가 아래로 커진다)
+    scale(s);
   } else {
-    camera();                             // 기본 카메라: z = 0 평면이 화면·웹캠 좌표와 정확히 겹친다
+    screenCamera();                       // 기본 카메라: z = 0 평면이 화면·웹캠 좌표와 정확히 겹친다
   }
 }
 
 // 3D 위치 → 웹캠 화면 좌표 (기본 카메라에서 보이는 자리). A의 motion 칸과 맞출 때 쓴다
 float webcamViewX(float x, float z) {
-  return width / 2.0 + (x - width / 2.0) * depthScale(z);
+  return W / 2.0 + (x - W / 2.0) * depthScale(z);
 }
 
 float webcamViewY(float y, float z) {
-  return height / 2.0 + (y - height / 2.0) * depthScale(z);
+  return H / 2.0 + (y - H / 2.0) * depthScale(z);
 }
 
 // 땅 위 z에서 화면에 보이는 가로 반폭 (멀수록 넓게 보인다)
 float visibleHalfWidth(float z) {
-  return (width / 2.0) * (EYE_Z - z) / EYE_Z;
+  return (W / 2.0) * (EYE_Z - z) / EYE_Z;
 }
 
 // 화면 높이 sy에 보이는 땅의 z (위 식을 거꾸로 푼 것)
@@ -115,7 +119,7 @@ float depthScale(float z) {
 // 땅 위 아무 곳 (화면에 보이는 범위 안)
 PVector randomMeadowPoint(float zNear, float zFar) {
   float z = random(zFar, zNear);
-  float x = width / 2.0 + random(-0.95, 0.95) * visibleHalfWidth(z);
+  float x = W / 2.0 + random(-0.95, 0.95) * visibleHalfWidth(z);
   return new PVector(x, GROUND_Y, z);
 }
 
@@ -125,9 +129,9 @@ void drawMeadow() {
   beginShape(QUADS);
   fill(52, 92, 42);
   vertex(-2500, GROUND_Y, 450);
-  vertex(width + 2500, GROUND_Y, 450);
+  vertex(W + 2500, GROUND_Y, 450);
   fill(hazeColor);
-  vertex(width + 9000, GROUND_Y, -6000);
+  vertex(W + 9000, GROUND_Y, -6000);
   vertex(-9000, GROUND_Y, -6000);
   endShape();
 

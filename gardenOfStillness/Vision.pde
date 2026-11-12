@@ -1,53 +1,56 @@
 // =====================================================
 // Vision.pde — 입력 (담당 A)
-// 웹캠 → (거울처럼 좌우 뒤집기) → 칸별 움직임 → 배경 빼기 → 4×4 블록으로 잡음 정리
-//      → isPerson · 상자 · 무게중심 · 가장자리 점 · 회색 인간 실루엣
-// 웹캠이 없거나 M 키를 누르면 예전 "마우스판 가짜 입력"으로 돈다.
-// 06-2 §2 약속 값의 이름·뜻은 그대로다.
-//
-// 시작 순서: 카메라 밖으로 나간다 → B 키(빈 배경 찍기) → 화면 앞에 선다
+// 2026-11-11부터: 배경 빼기 대신 "얼굴 찾기 + 움직임" (OpenCV for Processing)
+//   웹캠 → (거울처럼 좌우 뒤집기) → 칸별 움직임(앞 프레임과의 차이)
+//                                → 얼굴 찾기(OpenCV 얼굴 검출기) → 사람이 있는가 · 얼굴 위치·크기
+//   자세·손 흔들기·기울기는 Pose.pde가 얼굴 둘레 영역을 보고 판정한다.
+//   → 시작할 때 화면 밖으로 비킬 필요가 없다. 화면 앞에 앉기만 하면 된다.
+// 웹캠이 없거나 M 키를 누르면 "마우스판 가짜 입력"으로 돈다.
+// 06-2 §2 약속 값의 이름·뜻은 그대로다 (personCount만 "사람 픽셀 수" → "사람이 있으면 큰 수"로 바뀜).
 // =====================================================
 
 import processing.video.*;
+import gab.opencv.*;
+import java.awt.Rectangle;
 
 final int CELL = 20;   // 칸 한 변 (픽셀)
 final int COLS = 32;   // 640 / 20
 final int ROWS = 24;   // 480 / 20
-final int BLK = 4;     // 잡음 정리용 블록 한 변 (픽셀)
-final int BW = 160;    // 640 / 4
-final int BH = 120;    // 480 / 4
 final float MOTION_NOISE = 4;   // 칸 움직임이 이보다 작으면 카메라 잡음으로 보고 전체 합에서 뺀다
 
 // ---- 둘 사이 약속 값 (A가 채우고 B가 읽는다) — 이름·뜻을 바꾸려면 06-2 §2부터 고친다 ----
-boolean[] isPerson = new boolean[640 * 480];          // 픽셀마다 사람인지
-int personCount = 0;                                  // 사람 픽셀 수
+boolean[] isPerson = new boolean[640 * 480];          // 픽셀마다 사람인지 (마우스판 가짜 몸에서만 채운다)
+int personCount = 0;                                  // 사람이 있으면 큰 수(웹캠: 얼굴이 보이면 10000), 없으면 0
 float[][] motion = new float[COLS][ROWS];             // 칸마다 움직임 양
 float totalMotion = 0;                                // 전체 움직임 합 (잡음 뺀 값)
-ArrayList<PVector> edgePoints = new ArrayList<PVector>();  // 실루엣 가장자리 점 (덩굴이 향할 팔 끝을 여기서 찾는다)
-int boxLeft, boxRight, boxTop, boxBottom;             // 둘레 상자
-float centerX, centerY;                               // 무게중심
+ArrayList<PVector> edgePoints = new ArrayList<PVector>();  // 실루엣 가장자리 점 (마우스판 가짜 몸)
+int boxLeft, boxRight, boxTop, boxBottom;             // 둘레 상자 (웹캠: 얼굴 상자)
+float centerX, centerY;                               // 중심 (웹캠: 얼굴 가운데)
 String pose = "없음";                                 // 지금 프레임의 자세 이름
 boolean waving = false;                               // 손만 흔드는 중인지
 float waveX, waveY;                                   // 흔드는 위치
-float lean = 0;                                       // 몸 기울기 (왼쪽 -1 ~ 오른쪽 1) — A4-4, 지금은 ←→ 키
+float lean = 0;                                       // 몸 기울기 (왼쪽 -1 ~ 오른쪽 1)
+// ※ 위 값들은 모두 "웹캠 화면 좌표"다. 정원(B)이 화면·세계 위치와 비교할 때는
+//    Character.pde의 camToScreen·screenToCam으로 바꾼다 (웹캠 속 얼굴을 캐릭터 머리에 겹친다)
 
 // ---- 웹캠 ----
 Capture cam;
 boolean useCamera = false;     // true면 웹캠, false면 마우스판
 PImage frame;                  // 거울처럼 뒤집은 이번 프레임 (640×480)
-int[] bgPixels;                // B 키로 찍은 빈 배경 (없으면 null)
 float[] prevBright = new float[640 * 480];   // 전 프레임 밝기 (움직임 계산용)
-int[] blockCount = new int[BW * BH];         // 블록마다 "배경과 다른" 픽셀 수
-boolean[] blockPerson = new boolean[BW * BH];
-boolean[] blockTemp = new boolean[BW * BH];
-
-// ---- 화면에 그릴 회색 인간 ----
-PImage silhouette;
 String builtPose = "";         // 마우스판: 가짜 몸을 마지막으로 만든 자세
 
+// ---- 얼굴 찾기 (OpenCV) ----
+OpenCV opencv;
+PImage small;                  // 얼굴 찾기용 작은 화면 (320×240 — 작을수록 빠르다)
+float faceX = 320, faceY = 200, faceW = 100;   // 얼굴 가운데·폭 (웹캠 좌표, 부드럽게 따라간다)
+int faceSeenMs = -100000;      // 마지막으로 얼굴을 본 시각
+boolean faceNow = false;       // 이번 검사에서 얼굴을 찾았는가
+final int FACE_GRACE_MS = 2500;   // 얼굴이 잠깐 안 보여도(고개 숙임·돌림) 이 시간 동안은 "사람 있음"
+
 void initInput() {
-  silhouette = createImage(640, 480, ARGB);
   frame = createImage(640, 480, RGB);
+  small = createImage(320, 240, RGB);
 
   // ※ 3D(P3D) 모드에서는 Video 라이브러리가 카메라 영상을 그래픽카드로만 보내서 pixels[]가 전부 0(검정)이 된다.
   //    라이브러리 안의 설정(useGLBufferSink)을 꺼서 pixels[]에 영상이 들어오게 한다.
@@ -67,8 +70,11 @@ void initInput() {
       cam = new Capture(this, 640, 480, pickCamera(cams));
       cam.start();
       useCamera = true;
+      opencv = new OpenCV(this, 320, 240);
+      opencv.loadCascade(OpenCV.CASCADE_FRONTALFACE);   // 정면 얼굴 검출기 (라이브러리에 들어 있다)
     } catch (Exception e) {
       println("웹캠을 열 수 없어 마우스판으로 돈다: " + e);
+      useCamera = false;
     }
   }
   applyModeDefaults();
@@ -87,6 +93,7 @@ void applyModeDefaults() {
   if (useCamera) {
     sensitivity = 15;        // 칸 평균 밝기 차이
     calmSensitivity = 150;   // 잡음 뺀 칸 움직임의 합
+    threshold = 50;          // 기준 화면과 이만큼 색이 다르면 "달라졌다" (Pose.pde 영역 판정)
   } else {
     sensitivity = 12;        // 마우스 속도 (픽셀/프레임)
     calmSensitivity = 12;
@@ -100,25 +107,19 @@ void toggleInputMode() {
   applyModeDefaults();
 }
 
-void captureBackground() {
-  if (useCamera) {
-    frame.loadPixels();
-    bgPixels = frame.pixels.clone();   // 지금 화면을 배경으로 저장
-    println("배경 저장");
-  }
-}
-
 // 매 프레임
+// 웹캠: 손 흔들기·기울기·자세는 Pose.pde가 자동으로 판정한다 (키 입력 없음)
+// 마우스판(웹캠 없을 때 시험용): 키로 흉내 낸다 — W 손 흔들기 · ←→ 기울기 · 1~4 자세
 void updateInput() {
-  if (useCamera) updateCameraInput();
-  else updateMouseInput();
+  if (useCamera) {
+    updateCameraInput();
+    return;
+  }
+  updateMouseInput();
 
-  // 손 흔들기 (4주차 나비용) — 지금은 W를 누르는 동안
   waving = holdW;
-  waveX = mouseX;
-  waveY = mouseY;
-
-  // 몸 기울기 (A4-4 전까지 임시) — ←→ 키를 누르는 동안 그쪽으로 천천히 기운다
+  waveX = mx();
+  waveY = my();
   float leanTarget = 0;
   if (holdLeft) leanTarget -= 1;
   if (holdRight) leanTarget += 1;
@@ -146,7 +147,7 @@ void updateCameraInput() {
   frame.updatePixels();
 
   findMotion();
-  findPerson();
+  findFace();
 }
 
 // 밝기를 빠르게: (빨강 + 초록 + 파랑) / 3  (brightness()보다 훨씬 빠르다)
@@ -174,98 +175,39 @@ void findMotion() {
   }
 }
 
-// ② 배경 빼기 → 블록 정리 → 사람 픽셀 · 상자 · 중심 · 가장자리 · 회색 인간
-void findPerson() {
-  edgePoints.clear();
-  if (bgPixels == null) {          // 배경을 아직 안 찍었으면 사람을 찾지 않는다
-    personCount = 0;
-    silhouette.loadPixels();
-    java.util.Arrays.fill(silhouette.pixels, 0);
-    silhouette.updatePixels();
-    return;
-  }
-
-  // 2-1) 픽셀마다 배경과 색 차이가 threshold보다 크면 그 블록의 개수 +1
-  java.util.Arrays.fill(blockCount, 0);
-  float th2 = threshold * threshold;         // dist() 대신 제곱끼리 비교 (빠르다)
-  for (int y = 0; y < 480; y++) {
-    for (int x = 0; x < 640; x++) {
-      int i = x + y * 640;
-      int c = frame.pixels[i];
-      int b = bgPixels[i];
-      int dr = ((c >> 16) & 0xFF) - ((b >> 16) & 0xFF);
-      int dg = ((c >> 8) & 0xFF) - ((b >> 8) & 0xFF);
-      int db = (c & 0xFF) - (b & 0xFF);
-      if (dr * dr + dg * dg + db * db > th2) {
-        blockCount[(y / BLK) * BW + (x / BLK)]++;
-      }
+// ② 얼굴 찾기: 2프레임에 한 번, 작은 화면에서 가장 큰 얼굴 하나
+void findFace() {
+  if (frameCount % 2 == 0) {
+    small.copy(frame, 0, 0, 640, 480, 0, 0, 320, 240);
+    opencv.loadImage(small);
+    Rectangle[] faces = opencv.detect();
+    Rectangle best = null;
+    for (Rectangle r : faces) {
+      if (best == null || r.width > best.width) best = r;
+    }
+    faceNow = best != null;
+    if (faceNow) {
+      float nx = (best.x + best.width / 2.0) * 2;   // 작은 화면 → 640×480 좌표
+      float ny = (best.y + best.height / 2.0) * 2;
+      float nw = best.width * 2;
+      boolean jump = millis() - faceSeenMs > FACE_GRACE_MS || dist(nx, ny, faceX, faceY) > faceW * 2;
+      float k = jump ? 1 : 0.4;   // 처음 찾았거나 크게 뛰면 바로, 아니면 부드럽게
+      faceX += (nx - faceX) * k;
+      faceY += (ny - faceY) * k;
+      faceW += (nw - faceW) * k;
+      faceSeenMs = millis();
     }
   }
 
-  // 2-2) 블록 16픽셀 중 절반 이상이 달라야 "사람 블록" → 점 잡음이 사라진다
-  for (int k = 0; k < BW * BH; k++) blockTemp[k] = blockCount[k] >= 8;
-  // 이웃 4블록 중 2개 이상이 사람이어야 남긴다 → 외톨이 블록(잡음)을 지운다
-  for (int by = 0; by < BH; by++) {
-    for (int bx = 0; bx < BW; bx++) {
-      int k = by * BW + bx;
-      int n = 0;
-      if (bx > 0 && blockTemp[k - 1]) n++;
-      if (bx < BW - 1 && blockTemp[k + 1]) n++;
-      if (by > 0 && blockTemp[k - BW]) n++;
-      if (by < BH - 1 && blockTemp[k + BW]) n++;
-      blockPerson[k] = blockTemp[k] && n >= 2;
-    }
-  }
-
-  // 2-3) 픽셀마다: 사람이면 카메라 밝기로 명암을 준 회색, 아니면 투명
-  personCount = 0;
-  boxLeft = 640;
-  boxRight = 0;
-  boxTop = 480;
-  boxBottom = 0;
-  float sumX = 0, sumY = 0;
-  silhouette.loadPixels();
-  for (int y = 0; y < 480; y++) {
-    for (int x = 0; x < 640; x++) {
-      int i = x + y * 640;
-      boolean p = blockPerson[(y / BLK) * BW + (x / BLK)];
-      isPerson[i] = p;
-      if (p) {
-        personCount++;
-        if (x < boxLeft) boxLeft = x;
-        if (x > boxRight) boxRight = x;
-        if (y < boxTop) boxTop = y;
-        if (y > boxBottom) boxBottom = y;
-        sumX += x;
-        sumY += y;
-        int g = int(70 + fastBright(frame.pixels[i]) * 0.5);   // 70~197 사이 회색 — 얼굴·옷 명암이 남는다
-        silhouette.pixels[i] = 0xFF000000 | (g << 16) | (g << 8) | g;
-      } else {
-        silhouette.pixels[i] = 0;                                // 완전히 투명
-      }
-    }
-  }
-  silhouette.updatePixels();
-
-  // 사람이 없을 때 0으로 나누지 않게 (06-2 0-2의 5번)
-  if (personCount > 0) {
-    centerX = sumX / personCount;
-    centerY = sumY / personCount;
-  } else {
-    centerX = 320;
-    centerY = 240;
-    boxLeft = boxRight = boxTop = boxBottom = 0;
-  }
-
-  // 2-4) 가장자리 점: 사람 블록인데 옆 블록 하나라도 배경인 곳의 가운데
-  for (int by = 1; by < BH - 1; by++) {
-    for (int bx = 1; bx < BW - 1; bx++) {
-      int k = by * BW + bx;
-      if (blockPerson[k] && (!blockPerson[k - 1] || !blockPerson[k + 1] || !blockPerson[k - BW] || !blockPerson[k + BW])) {
-        edgePoints.add(new PVector(bx * BLK + BLK / 2, by * BLK + BLK / 2));
-      }
-    }
-  }
+  // 사람이 있는가: 얼굴을 최근 FACE_GRACE_MS 안에 봤으면 있음
+  boolean present = millis() - faceSeenMs < FACE_GRACE_MS;
+  personCount = present ? 10000 : 0;
+  centerX = faceX;
+  centerY = faceY;
+  boxLeft = int(faceX - faceW / 2);
+  boxRight = int(faceX + faceW / 2);
+  boxTop = int(faceY - faceW / 2);
+  boxBottom = int(faceY + faceW / 2);
 }
 
 // ================= 마우스판 (웹캠 없을 때 · 시험용) =================
@@ -276,12 +218,12 @@ void updateMouseInput() {
     }
   }
   // 이번 프레임에 마우스가 지나간 칸들에 마우스 속도를 넣는다
-  float speed = dist(mouseX, mouseY, pmouseX, pmouseY);
+  float speed = dist(mx(), my(), pmx(), pmy());
   if (speed > 0) {
     int steps = int(speed / (CELL / 2)) + 1;
     for (int s = 0; s <= steps; s++) {
-      float x = lerp(pmouseX, mouseX, s / float(steps));
-      float y = lerp(pmouseY, mouseY, s / float(steps));
+      float x = lerp(pmx(), mx(), s / float(steps));
+      float y = lerp(pmy(), my(), s / float(steps));
       int cx = constrain(int(x / CELL), 0, COLS - 1);
       int cy = constrain(int(y / CELL), 0, ROWS - 1);
       motion[cx][cy] = speed;
@@ -290,7 +232,7 @@ void updateMouseInput() {
   totalMotion = speed;
 }
 
-// 가짜 몸: 자세에 맞는 사람 모양을 그려서 웹캠처럼 isPerson · 상자 · 가장자리 점을 구한다
+// 가짜 몸: 자세에 맞는 사람 모양을 그려서 isPerson · 상자 · 가장자리 점을 구한다 (마우스판 시험용)
 void buildFakeBody(String p) {
   PGraphics g = createGraphics(640, 480);
   g.beginDraw();
@@ -326,7 +268,6 @@ void buildFakeBody(String p) {
   boxTop = 480;
   boxBottom = 0;
   float sumX = 0, sumY = 0;
-  silhouette.loadPixels();
   for (int y = 0; y < 480; y++) {
     for (int x = 0; x < 640; x++) {
       int i = x + y * 640;
@@ -339,14 +280,10 @@ void buildFakeBody(String p) {
         boxBottom = max(boxBottom, y);
         sumX += x;
         sumY += y;
-        int gr = int(120 + 30 * sin(y * 0.02));   // 밋밋하지 않게 위아래로 살짝 명암
-        silhouette.pixels[i] = 0xFF000000 | (gr << 16) | (gr << 8) | gr;
-      } else {
-        silhouette.pixels[i] = 0;
       }
     }
   }
-  silhouette.updatePixels();
+  // 사람이 없을 때 0으로 나누지 않게 (06-2 0-2의 5번)
   if (personCount > 0) {
     centerX = sumX / personCount;
     centerY = sumY / personCount;
@@ -368,51 +305,5 @@ void buildFakeBody(String p) {
 }
 
 // ================= 그리기 =================
-// 회색 인간은 평원 한가운데(z = 0 근처)에 세운 판이다. 판을 세 겹(뒤로 갈수록 어둡게) 겹쳐
-// 두께를 준다 → 시점이 옆으로 움직이면 옆면이 보여 입체감이 난다.
-// 깊이 기록을 끄고 정원 다음에 그리면: 몸 앞의 꽃·풀은 몸을 가리고, 몸 뒤의 평원은 몸에 가려진다.
-void drawSilhouette() {
-  // 조절판 showCamera: 웹캠이면 실루엣 대신 카메라 화면 그대로 (몸 판 자리 z = 0) — 맞춰 볼 때 쓴다
-  if (showCamera && useCamera) {
-    hint(DISABLE_DEPTH_MASK);
-    image(frame, 0, 0);
-    hint(ENABLE_DEPTH_MASK);
-    return;
-  }
-  if (personCount == 0) return;
-  hint(DISABLE_DEPTH_MASK);
-  float[] zs = { -10, -6, -2 };
-  float[] shade = { 110, 175, 255 };
-  for (int k = 0; k < 3; k++) {
-    pushMatrix();
-    translate(0, 0, zs[k]);
-    tint(shade[k]);
-    image(silhouette, 0, 0);
-    popMatrix();
-  }
-  noTint();
-  hint(ENABLE_DEPTH_MASK);
-}
-
-// 점검 화면: 몸이 서 있는 판(z = 0) 위에 상자 · 중심 · 가장자리 점을 그린다
-void drawBodyDebug() {
-  if (personCount > 0) {
-    hint(DISABLE_DEPTH_TEST);
-    noFill();
-    stroke(255, 80, 80);
-    strokeWeight(1);
-    rect(boxLeft, boxTop, boxRight - boxLeft, boxBottom - boxTop);
-    fill(255, 80, 80);
-    noStroke();
-    ellipse(centerX, centerY, 8, 8);
-    stroke(255, 255, 255, 110);       // 점 수백 개는 POINTS 한 번으로 (빠르다)
-    strokeWeight(2);
-    beginShape(POINTS);
-    for (PVector e : edgePoints) {
-      vertex(e.x, e.y);
-    }
-    endShape();
-    noStroke();
-    hint(ENABLE_DEPTH_TEST);
-  }
-}
+// 화면에는 웹캠 속 사람을 그리지 않는다 — 캐릭터(Character.pde)가 동작을 따라 한다 (2026-11-11).
+// 웹캠 화면 점검은 조절판 showCamera → Character.pde의 drawCameraPreview()

@@ -44,7 +44,7 @@ class Seed {
   }
 
   boolean offScreen() {
-    return abs(x - width / 2.0) > visibleHalfWidth(z) + 60;
+    return abs(x - W / 2.0) > visibleHalfWidth(z) + 60;
   }
 
   void display() {
