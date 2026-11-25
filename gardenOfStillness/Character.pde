@@ -228,9 +228,8 @@ PVector rotateAroundFeet(PVector p, float ang) {
 // ================= 웹캠 좌표 ↔ 캐릭터(화면) 좌표 =================
 // 웹캠 속 얼굴을 캐릭터 머리에 겹친다: 얼굴 가운데 → 캐릭터 머리 가운데, 얼굴 폭 → 캐릭터 머리 지름.
 // 그래서 "오른손을 휘두르면 캐릭터 오른손 근처 꽃이 흩날리고", 손 흔드는 자리 근처로 나비가 온다.
-// 마우스판은 가짜 몸이 이미 캐릭터 자리에 있으니 그대로(1:1) 쓴다.
 final float CHAR_HEAD_Y = CHAR_FEET - LEG_LEN * 2 - TORSO_LEN - HEAD_R + 4;   // 서 있을 때 머리 가운데
-boolean mapIdentity() { return !useCamera || personCount < 500; }
+boolean mapIdentity() { return personCount < 500; }
 float camScale() { return HEAD_R * 2 / max(20, faceW); }
 
 float camToScreenX(float x) {
@@ -251,7 +250,8 @@ float screenToCamY(float y) {
 }
 
 // ================= 웹캠 미리보기 (조절판 showCamera) =================
-// 판정을 점검할 때만: 화면 오른쪽 위에 웹캠 화면을 작게, 얼굴 상자와 판정 영역 네 곳을 겹쳐 보여 준다
+// 판정을 점검할 때만: 화면 오른쪽 위 작은 판에 얼굴 상자와 판정 영역 네 곳을 보여 준다
+// ※ 사람 모습(웹캠 영상)은 그리지 않는다 — 어두운 판 위에 판정 표시만
 // 영역은 "기준과 달라진 비율"만큼 진하게 칠해진다 (넘으면 노랑)
 void drawCameraPreview() {
   if (!showCamera || !useCamera) return;
@@ -260,7 +260,8 @@ void drawCameraPreview() {
   noStroke();
   fill(0, 160);
   rect(px - 3, py - 3, pw + 6, ph + 6, 4);
-  image(frame, px, py, pw, ph);
+  fill(20, 30, 40);
+  rect(px, py, pw, ph);   // 웹캠 영상 대신 빈 판
   if (personCount < 500) return;
   float fw = faceW;
   if (hasBase) {

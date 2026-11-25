@@ -4,7 +4,7 @@
 //
 //   ① 기준: 얼굴이 보이고 2초 가만히 있으면, 그때의 화면(사람 포함)과 얼굴 위치·크기를 "기준"으로 저장한다.
 //      → 평소 모습이 기준 화면에 들어 있으므로, 나중에 "기준과 달라진 곳" = 팔·손이 새로 들어온 곳이다.
-//      사람이 3초 넘게 사라지면 기준을 지운다. 자리를 옮겨 얼굴이 멀리 가면 3초 가만히 있을 때 다시 잡는다. C 키로 다시.
+//      사람이 3초 넘게 사라지면 기준을 지운다. 자리를 옮겨 얼굴이 멀리 가면 3초 가만히 있을 때 다시 잡는다.
 //
 //   ② 자세: 얼굴 크기(폭 fw)에 맞춘 영역 네 곳이 기준 화면과 얼마나 달라졌는지(0~1)를 본다.
 //        ┌──────┐   ┌──────┐
@@ -23,9 +23,8 @@
 //   ③ 손 흔들기: 움직인 칸이 "적게"(손 크기) 있는 프레임이 최근에 충분히 많으면 → 그 위치가 waveX·waveY
 //   ④ 기울기: 얼굴이 기준보다 옆으로 간 만큼 → lean
 //
-// ⚠ 기준 숫자는 측정 전 임시값이다. 점검 화면(D)·웹캠 미리보기(조절판 showCamera)에 판정 숫자가 나오고
-//   기록(L)에도 남는다 → A3-1 측정으로 고친다. "2초 유지했는가"는 B(Scene.pde)가 판단한다.
-// 마우스판(웹캠 없을 때)은 키로 흉내 낸다: 1~4 자세 · W 손 흔들기 · ←→ 기울기 · 0 사람 없음
+// ⚠ 기준 숫자는 측정 전 임시값이다. 점검 화면(조절판 showDebug)·웹캠 미리보기(조절판 showCamera)에 판정 숫자가 나온다
+//   → A3-1 측정으로 고친다. "2초 유지했는가"는 B(Scene.pde)가 판단한다.
 // =====================================================
 
 // ---- 판정 기준 (임시 — A3-1 측정으로 고친다) ----
@@ -39,13 +38,6 @@ final int WAVE_WINDOW = 20;        // 최근 20프레임 중
 final int WAVE_NEED = 12;          // 12프레임 넘게 "작게 움직임"이면 손 흔들기
 final float LEAN_RANGE = 1.2;      // 기울기: 얼굴이 (기준 얼굴 폭 × 1.2)만큼 옆으로 가면 lean 1
 final float LEAN_DEAD = 0.2;       // 이보다 작으면 0으로 본다
-
-// ---- 마우스판 키 ----
-boolean holdZero = false;   // 0 키를 누르고 있는가 (마우스판: 사람 없음)
-boolean holdW = false;      // W 키 (마우스판: 손 흔들기)
-boolean holdLeft = false;   // ← 키 (마우스판: 몸 기울기)
-boolean holdRight = false;  // → 키
-String fakePose = "차렷";   // 숫자 키로 고른 자세 (마우스판)
 
 // ---- 기준 ----
 boolean hasBase = false;
@@ -65,15 +57,7 @@ boolean[] waveHist = new boolean[WAVE_WINDOW];
 int waveIdx = 0;
 
 void updatePose() {
-  if (!useCamera) {
-    // 마우스판: 키로 고른 자세대로 가짜 몸을 만든다 (자세가 바뀔 때만)
-    if (holdZero) pose = "없음";
-    else pose = fakePose;
-    if (!pose.equals(builtPose)) buildFakeBody(pose);
-    return;
-  }
-
-  // ---- 웹캠: 사람이 없으면 ----
+  // ---- 사람이 없으면 (웹캠을 못 열었을 때도) ----
   if (personCount < 500) {
     pose = "없음";
     candPose = "없음";
@@ -234,32 +218,3 @@ void drawPoseNotice() {
   textAlign(LEFT, BASELINE);
 }
 
-void inputKeyPressed() {
-  if (key == CODED) {               // 화살표처럼 글자가 아닌 키는 keyCode로 본다
-    if (keyCode == LEFT) holdLeft = true;
-    if (keyCode == RIGHT) holdRight = true;
-    return;
-  }
-  if (key == '0') holdZero = true;
-  if (key == '1') fakePose = "차렷";
-  if (key == '2') fakePose = "두손들기";
-  if (key == '3') fakePose = "웅크리기";
-  if (key == '4') fakePose = "팔벌리기";
-  if (key == 'w' || key == 'W') holdW = true;
-  if (key == 'c' || key == 'C') clearBase();           // 기준 다시 잡기 (2초 가만히 있으면 저장)
-  if (key == 'm' || key == 'M') toggleInputMode();     // 웹캠 ↔ 마우스판
-  if (key == '[') threshold = max(5, threshold - 5);   // "달라졌다"로 볼 색 차이 ↓ (팔을 들어도 안 잡히면)
-  if (key == ']') threshold += 5;                      // ↑ (가만히 있는데도 자세가 바뀌면)
-  if (key == '-') calmSensitivity = max(5, calmSensitivity - 10);  // 고요함 기준 ↓
-  if (key == '=') calmSensitivity += 10;                            // ↑ (가만히 있는데도 고요함이 안 차면)
-}
-
-void inputKeyReleased() {
-  if (key == CODED) {
-    if (keyCode == LEFT) holdLeft = false;
-    if (keyCode == RIGHT) holdRight = false;
-    return;
-  }
-  if (key == '0') holdZero = false;
-  if (key == 'w' || key == 'W') holdW = false;
-}

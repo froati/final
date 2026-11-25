@@ -203,16 +203,7 @@ color mutate(color c) {
   return color(r, g, b);
 }
 
-// 시험용 클릭: 화면에서 누른 자리 "아래의 땅"에 싹 — 꽃은 땅에서만 자란다
-//   화면 높이 sy에 보이는 땅의 깊이 z를 구하고, 그 깊이에서 화면 x에 해당하는 땅 위 x를 구한다
-void plantAt(float sx, float sy) {
-  if (sy <= HORIZON_Y + 2) return;                    // 하늘(지평선 위)을 누르면 심지 않는다
-  float z = max(groundZForScreenY(sy), -2000);
-  float x = W / 2.0 + (sx - W / 2.0) / depthScale(z);
-  addFlower(new Flower(x, GROUND_Y, z, palette[int(random(palette.length))]));
-}
-
-// R 키 · 조절판의 resetGarden 버튼
+// 조절판의 resetGarden 버튼
 void resetGarden() {
   flowers.clear();
   seeds.clear();
@@ -367,16 +358,15 @@ void drawDebug() {
       + "  나비 " + butterflies.size() + "  덩굴 " + vines.size(),
     "lean " + nf(lean, 1, 2) + "   산들바람 " + nf(breeze, 1, 2) + "   거름 합 " + nf(totalSoil(), 1, 1)
       + (waving ? "   손 흔드는 중" : ""),
-    (useCamera ? "웹캠 (얼굴 " + (faceNow ? "보임" : "안 보임") + ", 폭 " + nf(faceW, 1, 0) + ")" : "마우스판")
-      + "   threshold " + nf(threshold, 1, 0) + " [ ]   고요함 기준 " + nf(calmSensitivity, 1, 0) + " - =",
+    (useCamera ? "웹캠 (얼굴 " + (faceNow ? "보임" : "안 보임") + ", 폭 " + nf(faceW, 1, 0) + ")" : "웹캠 없음")
+      + "   threshold " + nf(threshold, 1, 0) + "   고요함 기준 " + nf(calmSensitivity, 1, 0),
     useCamera
       ? (hasBase
           ? "판정  위 " + nf(upL, 1, 2) + "/" + nf(upR, 1, 2) + "  옆 " + nf(sideL, 1, 2) + "/" + nf(sideR, 1, 2)
             + "  내려감 " + nf(dropRatio, 1, 2) + "  움직인 칸 " + movingCells
           : "기준 잡는 중 — 2초 가만히 있어 주세요")
-      : "마우스판: 1~4 자세 · W 손흔들기 · ←→ 기울기 · 0 사람 없음",
-    "fps  " + nf(frameRate, 1, 0) + (logging ? "   ● 기록 중" : ""),
-    "C 기준 다시 · M 웹캠/마우스 · S 사진 · L 기록 · R 처음 · D · H 숨기기"
+      : "",
+    "fps  " + nf(frameRate, 1, 0)
   };
   noStroke();
   fill(0, 120);
