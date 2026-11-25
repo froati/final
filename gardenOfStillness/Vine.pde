@@ -5,7 +5,7 @@
 // 마디는 sin()으로 구불거리고, 마디 끝에 가끔 꽃이 핀다 (그 꽃도 한살이를 따른다).
 // 팔을 내리면 덩굴은 거기서 멈추고, 한동안(lifespanSec) 지나면 시들어 사라진다.
 //
-// 팔 끝 = 캐릭터의 양손 (2026-11-11 캐릭터로 바꾸며. 전에는 실루엣 가장자리 점의 맨 왼쪽·오른쪽)
+// 팔 끝 = 1인칭 화면의 양손 (2026-11-25. 전에는 3인칭 캐릭터의 양손)
 // =====================================================
 
 final float VINE_SEG = 8;          // 마디 하나 길이
@@ -19,7 +19,7 @@ void updateVines() {
   boolean armsOpen = personCount >= 500 && pose.equals("팔벌리기") && heldSec >= poseHold;
 
   if (armsOpen) {
-    // 팔 끝 = 캐릭터의 양손 (Character.pde가 그릴 때 저장한 손끝 위치)
+    // 팔 끝 = 화면의 양손 (Character.pde가 그릴 때 저장한 손끝 위치)
     PVector tipL = handL.copy();
     PVector tipR = handR.copy();
     // 덩굴이 없거나 시드는 중이면 새로 심는다 (팔 끝 바로 아래 바깥쪽 땅)

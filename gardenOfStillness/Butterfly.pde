@@ -18,7 +18,7 @@ void updateButterflies() {
     lastWavingMs = millis();
     // 손을 흔들기 시작하면 나비가 그 자리에 나타난다 (둘째 나비는 3초 뒤)
     if (butterflies.size() == 0 || (butterflies.size() < MAX_BUTTERFLIES && frameCount % 180 == 0)) {
-      butterflies.add(new Butterfly(camToScreenX(waveX), camToScreenY(waveY), 0));   // 웹캠 좌표 → 캐릭터 몸 위의 손 자리
+      butterflies.add(new Butterfly(camToScreenX(waveX), camToScreenY(waveY), 0));   // 웹캠 좌표 → 화면의 손 자리
     }
   }
   for (int i = butterflies.size() - 1; i >= 0; i--) {
@@ -91,7 +91,7 @@ class Butterfly {
         ty = target.headY() - 5;   // 꽃 위에 살짝 떠서 앉는다
         tz = target.z;
       } else {
-        tx = camToScreenX(waveX);  // 핀 꽃이 없으면 (캐릭터 몸 위의) 손 근처를 맴돈다
+        tx = camToScreenX(waveX);  // 핀 꽃이 없으면 손 근처를 맴돈다
         ty = camToScreenY(waveY);
         tz = 0;
       }

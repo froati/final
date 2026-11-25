@@ -27,7 +27,7 @@ boolean waving = false;                               // 손만 흔드는 중인
 float waveX, waveY;                                   // 흔드는 위치
 float lean = 0;                                       // 몸 기울기 (왼쪽 -1 ~ 오른쪽 1)
 // ※ 위 값들은 모두 "웹캠 화면 좌표"다. 정원(B)이 화면·세계 위치와 비교할 때는
-//    Character.pde의 camToScreen·screenToCam으로 바꾼다 (웹캠 속 얼굴을 캐릭터 머리에 겹친다)
+//    Character.pde의 camToScreen·screenToCam으로 바꾼다 (웹캠 속 얼굴 = 1인칭의 눈)
 
 // ---- 웹캠 ----
 Capture cam;
@@ -166,5 +166,5 @@ void findFace() {
 }
 
 // ================= 그리기 =================
-// 화면에는 웹캠 속 사람을 그리지 않는다 — 캐릭터(Character.pde)가 동작을 따라 한다 (2026-11-11).
+// 화면에는 웹캠 속 사람을 그리지 않는다 — 1인칭 시점으로 정원만 보인다 (Character.pde, 2026-11-25).
 // 웹캠 화면 점검은 조절판 showCamera → Character.pde의 drawCameraPreview()

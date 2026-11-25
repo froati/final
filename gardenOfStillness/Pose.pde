@@ -14,6 +14,7 @@
 //   │ 옆 L │     몸통      │ 옆 R │  옆 L·R = 어깨 높이 바깥  → 팔을 벌리면 팔이 들어온다
 //   └──────┘               └──────┘
 //      위 양쪽 모두 POSE_UP 넘게 달라짐 → 두손들기
+//      왼쪽 위만 POSE_UP 넘게 달라짐 → 왼손들기 (웹캠이 거울처럼 뒤집혀 있어 관객의 왼손 = 화면 왼쪽)
 //      옆 양쪽 모두 POSE_SIDE 넘게 달라짐 → 팔벌리기
 //      얼굴이 기준보다 얼굴 폭의 60% 넘게 내려감 → 웅크리기
 //      그 밖 → 차렷.   같은 판정이 6프레임 이어져야 바뀐다(깜빡임 방지)
@@ -104,6 +105,7 @@ void updatePose() {
 
   String now;
   if (min(upL, upR) > POSE_UP) now = "두손들기";
+  else if (upL > POSE_UP) now = "왼손들기";
   else if (min(sideL, sideR) > POSE_SIDE) now = "팔벌리기";
   else if (dropRatio > POSE_DROP) now = "웅크리기";
   else now = "차렷";
@@ -179,20 +181,27 @@ void clearBase() {
   upL = upR = sideL = sideR = dropRatio = 0;
 }
 
-// 손 흔들기: 움직인 칸이 "적게"(손 크기) 있는 프레임이 최근에 충분히 많으면 손 흔들기
+// 손 흔들기: "손 자리"에서 움직인 칸이 적게(손 크기) 있는 프레임이 최근에 충분히 많으면 손 흔들기
+// 손 자리 = 얼굴 옆(얼굴 폭 0.8배 바깥 ~ 4배 안) · 어깨 높이 위(얼굴 가운데 + 얼굴 폭 0.7배 위)
+//   → 말하기·고개 끄덕임(얼굴 안)이나 숨쉬기·몸 흔들림(몸통)은 손 흔들기로 세지 않는다
+// 기준 자세를 잡기 전에는 판정하지 않는다
 void updateWave() {
   movingCells = 0;
   float sx = 0, sy = 0;
+  float fw = max(20, faceW);
   for (int cx = 0; cx < COLS; cx++) {
     for (int cy = 0; cy < ROWS; cy++) {
-      if (motion[cx][cy] > sensitivity) {
+      float px = cx * CELL + CELL / 2, py = cy * CELL + CELL / 2;
+      float dx = abs(px - faceX);
+      boolean handZone = dx > fw * 0.8 && dx < fw * 4 && py < faceY + fw * 0.7;
+      if (handZone && motion[cx][cy] > sensitivity) {
         movingCells++;
         sx += cx * CELL + CELL / 2;
         sy += cy * CELL + CELL / 2;
       }
     }
   }
-  boolean small = movingCells >= WAVE_MIN_CELLS && movingCells <= WAVE_MAX_CELLS;
+  boolean small = hasBase && movingCells >= WAVE_MIN_CELLS && movingCells <= WAVE_MAX_CELLS;
   waveHist[waveIdx] = small;
   waveIdx = (waveIdx + 1) % WAVE_WINDOW;
   int n = 0;

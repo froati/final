@@ -16,7 +16,7 @@ color hazeColor;                 // 멀리 있는 것이 섞이는 안개 색
 void initMeadow() {
   EYE_Z = (H / 2.0) / tan(PI / 6);   // 프로세싱 기본 카메라 공식
   HORIZON_Y = H / 2.0;
-  hazeColor = color(185, 208, 195);
+  hazeColor = color(140, 185, 110);   // 멀리 갈수록 밝은 연두 (맑은 날 초원)
 
   // 풀잎을 미리 한 번만 만들어 PShape에 담아 둔다 (매 프레임 만들면 느리다)
   grassChunks = new PShape[GRASS_CHUNKS];
@@ -38,8 +38,8 @@ void initMeadow() {
       float w = random(3, 6);         // 풀잎 너비
       float lean = random(-7, 7);     // 풀잎마다 조금씩 기울게
       float haze = constrain(map(z, -150, -2400, 0, 0.8), 0, 0.8);   // 멀수록 안개 색
-      color baseC = lerpColor(color(38, 88, 34), hazeColor, haze);
-      color tipC = lerpColor(color(random(105, 150), random(170, 210), random(60, 95)), hazeColor, haze);
+      color baseC = lerpColor(color(44, 112, 34), hazeColor, haze);
+      color tipC = lerpColor(color(random(90, 135), random(170, 205), random(45, 80)), hazeColor, haze);
 
       s.fill(baseC);
       s.vertex(x - w / 2, GROUND_Y, z);
@@ -127,7 +127,7 @@ void drawMeadow() {
   // 땅 평면: 가까운 곳은 진한 초록, 먼 곳은 안개 색 (꼭짓점마다 색을 주면 사이가 그러데이션된다)
   noStroke();
   beginShape(QUADS);
-  fill(52, 92, 42);
+  fill(62, 130, 44);                  // 가까운 땅: 선명한 초록
   vertex(-2500, GROUND_Y, 450);
   vertex(W + 2500, GROUND_Y, 450);
   fill(hazeColor);

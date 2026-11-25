@@ -5,6 +5,7 @@
 // ★ 성장 계수 growthFactor() = calm × light  (06-1 §4-4 "자라기": growSpeed × calm × light)
 //   가만히 서 있음(차렷, 햇빛 0.5)  ×1 — 멈춰 있는 동안 시간이 지나면 핀다
 //   두 손 들고 멈춤(햇빛 1)         ×2 — 빠르게
+//   왼손 들고 멈춤                  ×LEFT_HAND_BOOST — 햇빛은 그대로, 성장만 빠르게 (2026-11-25)
 //   움직임                          ×0 — 고요함이 0 → 자라지 않는다 (게다가 흩날린다)
 //   웅크리고 멈춤(햇빛 0)           ×0 — 해가 져서 멈춘다 (반딧불이)
 //   아무도 없음                     ×0 — 자라지 않고 늙기만 한다 → 시들고 씨앗을 남긴다
@@ -29,6 +30,10 @@ float hintAlpha = 0;
 
 // ---- 2초 유지 판단 ----
 String heldPose = "없음";
+
+// ---- 왼손 들기: 성장 가속 ----
+final float LEFT_HAND_BOOST = 3;   // 왼손을 poseHold초 들고 있으면 성장 ×3 (고요함 × 햇빛에 곱한다)
+float growBoost = 1;                 // 지금 배율 — 목표로 천천히 따라간다
 int poseStartMs = 0;
 
 // ---- 정원에 사는 것들 ----
@@ -74,7 +79,7 @@ void sowMeadow() {
 
 // ★ 성장 계수 (위 설명 참고)
 float growthFactor() {
-  return calm * light;
+  return calm * light * growBoost;
 }
 
 // 차렷으로 가만히 서 있을 때(calm 1 × light 0.5) 대비 몇 배인가 — 화면 표시용
@@ -105,6 +110,9 @@ void updateEnvironment() {
     else if (pose.equals("웅크리기")) lightTarget = 0.0;
     // 팔벌리기는 햇빛을 바꾸지 않는다 — 덩굴의 목표가 된다 (4주차 B4-3)
   }
+  // 왼손 들기: 햇빛은 그대로 두고 성장 배율만 올린다 (손을 내리면 천천히 1로)
+  float boostTarget = (pose.equals("왼손들기") && heldSec >= poseHold) ? LEFT_HAND_BOOST : 1;
+  growBoost += (boostTarget - growBoost) * 0.03;
   light = light * 0.995 + lightTarget * 0.005;
 
   // 바람: 움직이면 바로 오르고, 멈추면 금방 잦아든다
@@ -142,8 +150,8 @@ void updateGarden() {
 
     // 흩날림: 꽃머리가 "웹캠 화면에서" 있는 칸의 움직임이 sensitivity를 넘으면 꽃잎이 된다
     //         보는 시점이 움직여도 웹캠 기준으로 계산한다 (Meadow.pde의 webcamViewX·Y)
-    //         웹캠 속 사람의 몸을 캐릭터 몸에 겹쳐서 본다 (Character.pde screenToCam)
-    //         → 오른손을 휘두르면 캐릭터 오른손 근처 꽃이 흩날린다
+    //         웹캠 속 얼굴을 화면의 몸 기준점에 겹쳐서 본다 (Character.pde screenToCam)
+    //         → 오른손을 휘두르면 화면 오른쪽(오른손 근처) 꽃이 흩날린다
     float sx = screenToCamX(webcamViewX(f.headX(), f.z));
     float sy = screenToCamY(webcamViewY(f.headY(), f.z));
     int cx = constrain(int(sx / CELL), 0, COLS - 1);
@@ -224,12 +232,12 @@ void drawSky() {
   color top, horizon;
   if (light < 0.5) {
     float t = light / 0.5;
-    top = lerpColor(color(12, 16, 40), color(110, 165, 215), t);
-    horizon = lerpColor(color(40, 42, 80), color(220, 220, 205), t);
+    top = lerpColor(color(12, 16, 40), color(60, 125, 205), t);
+    horizon = lerpColor(color(40, 42, 80), color(205, 222, 236), t);
   } else {
     float t = (light - 0.5) / 0.5;
-    top = lerpColor(color(110, 165, 215), color(140, 205, 250), t);
-    horizon = lerpColor(color(220, 220, 205), color(255, 244, 215), t);
+    top = lerpColor(color(60, 125, 205), color(28, 108, 220), t);       // 맑은 날: 위는 진한 파랑
+    horizon = lerpColor(color(205, 222, 236), color(208, 230, 248), t); // 지평선 쪽은 옅은 하늘색
   }
   noStroke();
   beginShape(QUADS);                 // 꼭짓점 색이 다른 사각형 = 그러데이션
@@ -245,6 +253,10 @@ void drawSky() {
   // 시점이 옆으로 움직이면 먼 것일수록 조금만 움직인다 (시차 — 입체감)
   float shift = -(eyeX - W / 2.0);
 
+
+  // 뭉게구름 — 천천히 오른쪽으로 흘러간다
+  drawClouds(shift);
+
   // 해: light가 클수록 높이 뜬다
   float sunY = map(light, 0, 1, skyHorizon + 30, 60);
   float sunX = 530 + shift * 0.03;
@@ -253,13 +265,75 @@ void drawSky() {
   fill(255, 236, 170);
   ellipse(sunX, sunY, 56, 56);
 
-  // 먼 언덕 (지평선 위로 살짝) — 뒤쪽 언덕은 덜, 앞쪽 언덕은 더 움직인다
-  fill(lerpColor(horizon, color(90, 130, 105), 0.3));
-  ellipse(660 + shift * 0.06, skyHorizon + 10, 380, 34);
-  fill(lerpColor(horizon, color(90, 130, 105), 0.45));
-  ellipse(90 + shift * 0.1, skyHorizon + 14, 460, 46);
-  ellipse(430 + shift * 0.1, skyHorizon + 16, 560, 38);
+  // 먼 언덕: 지평선 위로 아주 낮고 완만하게 (먼 것일수록 하늘색에 묻힌다)
+  color farHill = lerpColor(horizon, color(70, 95, 105), 0.35);
+  color nearHill = lerpColor(horizon, color(70, 120, 60), 0.55);
+  fill(farHill);
+  ellipse(500 + shift * 0.05, skyHorizon + 4, 420, 14);          // 멀리 푸르스름한 능선
+  ellipse(60 + shift * 0.05, skyHorizon + 4, 260, 10);
+  fill(nearHill);
+  ellipse(180 + shift * 0.08, skyHorizon + 6, 300, 26);          // 가까운 낮은 둔덕
+  ellipse(420 + shift * 0.08, skyHorizon + 7, 520, 12);
   hint(ENABLE_DEPTH_TEST);
+}
+
+// ---------- 뭉게구름 ----------
+// 구름 하나 = 동그라미 여러 개. 아래는 평평하고 위는 몽글몽글하게, 밑면은 살짝 회색.
+// 지평선에 가까울수록 작고 납작하다 (멀리 있는 구름).
+final int CLOUD_COUNT = 11;
+float[] cloudX, cloudY, cloudS, cloudSpeed;
+float[][] puffDX, puffDY, puffR;
+
+void initClouds() {
+  cloudX = new float[CLOUD_COUNT];
+  cloudY = new float[CLOUD_COUNT];
+  cloudS = new float[CLOUD_COUNT];
+  cloudSpeed = new float[CLOUD_COUNT];
+  puffDX = new float[CLOUD_COUNT][];
+  puffDY = new float[CLOUD_COUNT][];
+  puffR = new float[CLOUD_COUNT][];
+  for (int i = 0; i < CLOUD_COUNT; i++) {
+    float depth = random(1);                          // 0 = 높고 가까운 구름 · 1 = 지평선 가까이 먼 구름
+    cloudY[i] = lerp(30, skyHorizon - 18, depth * depth * 0.4 + depth * 0.6);
+    cloudS[i] = lerp(0.8, 0.32, depth);
+    cloudX[i] = -80 + (i + random(0.15, 0.85)) * (W + 160) / CLOUD_COUNT;   // 가로로 고르게 흩어 놓는다
+    cloudSpeed[i] = lerp(0.06, 0.015, depth);
+    int n = int(random(6, 11));
+    puffDX[i] = new float[n];
+    puffDY[i] = new float[n];
+    puffR[i] = new float[n];
+    for (int k = 0; k < n; k++) {
+      float u = (k + 0.5) / n;                        // 구름 가로 위치 0~1
+      puffDX[i][k] = (u - 0.5) * 120 + random(-8, 8);
+      puffR[i][k] = (22 + 26 * sin(u * PI)) * random(0.8, 1.15);   // 가운데가 크고 높다
+      puffDY[i][k] = -puffR[i][k] * 0.35 + random(-4, 4);
+    }
+  }
+}
+
+void drawClouds(float shift) {
+  if (cloudX == null) initClouds();
+  float day = constrain(light * 2.2, 0, 1);           // 밤에는 어두운 회색 구름
+  color body = lerpColor(color(55, 60, 85), color(255), day);
+  color under = lerpColor(color(40, 44, 66), color(222, 230, 240), day);
+  noStroke();
+  for (int i = 0; i < CLOUD_COUNT; i++) {
+    cloudX[i] += cloudSpeed[i] + windX() * 0.05;
+    if (cloudX[i] > W + 120) cloudX[i] = -120;        // 오른쪽으로 나가면 왼쪽에서 다시
+    if (cloudX[i] < -120) cloudX[i] = W + 120;
+    float cx = cloudX[i] + shift * 0.02;
+    float s = cloudS[i];
+    float sy = cloudY[i];
+    // 밑면 그늘 (납작한 타원)
+    fill(under);
+    ellipse(cx, sy + 4 * s, 130 * s, 22 * s);
+    // 몽글몽글한 윗부분
+    fill(body);
+    for (int k = 0; k < puffDX[i].length; k++) {
+      float r = puffR[i][k] * s;
+      ellipse(cx + puffDX[i][k] * s, sy + puffDY[i][k] * s, r * 2, r * 1.7);
+    }
+  }
 }
 
 void drawGarden() {
@@ -330,6 +404,9 @@ void drawGrowthStatus() {
   } else if (calm < 0.3) {
     why = "움직임 — 자라지 않는다";
     col = color(230, 150, 130);
+  } else if (growBoost > 1.5) {
+    why = "왼손 — 빠르게 자란다";
+    col = color(150, 255, 170);
   } else if (light > 0.75) {
     why = "햇빛 + 고요함 — 빠르게";
     col = color(255, 220, 110);
